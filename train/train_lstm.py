@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 from utils.dataset import load_data
 from utils.data_preprocess import clean_data, remove_outliers
@@ -25,7 +25,7 @@ DATASET_PATH = "data/"
 # ==============================
 # SEQUENCE CREATION
 # ==============================
-def create_sequences(X, y, seq_length=20):
+def create_sequences(X, y, seq_length=5):  # 🔥 shorter sequence
     X_seq, y_seq = [], []
 
     for i in range(len(X) - seq_length):
@@ -46,19 +46,24 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, epochs=25
         model.train()
         total_loss = 0
 
-        # ===== TRAIN LOOP =====
         for X_batch, y_batch in train_loader:
             optimizer.zero_grad()
 
-            outputs = model(X_batch)           # shape [batch, 1]
-            loss = criterion(outputs, y_batch) # shape matches
+            outputs = model(X_batch)
+            loss = criterion(outputs, y_batch)
 
             loss.backward()
-            optimizer.step()
 
+            # 🔥 gradient clipping (stability)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+            optimizer.step()
             total_loss += loss.item()
 
-        # ===== VALIDATION LOOP (FIXED MEMORY ISSUE) =====
+        # 🔥 FIX: average loss
+        avg_train_loss = total_loss / len(train_loader)
+
+        # ===== VALIDATION =====
         model.eval()
         val_loss_total = 0
 
@@ -68,18 +73,20 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, epochs=25
                 loss = criterion(outputs, y_batch)
                 val_loss_total += loss.item()
 
-        train_losses.append(total_loss)
-        val_losses.append(val_loss_total)
+        avg_val_loss = val_loss_total / len(val_loader)
 
-        print(f"Epoch {epoch+1}/{epochs} | Train Loss: {total_loss:.4f} | Val Loss: {val_loss_total:.4f}")
+        train_losses.append(avg_train_loss)
+        val_losses.append(avg_val_loss)
+
+        print(f"Epoch {epoch+1}/{epochs} | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f}")
 
     return train_losses, val_losses
 
 
 # ==============================
-# EVALUATION
+# EVALUATION (RESIDUAL FIX)
 # ==============================
-def evaluate(model, X_test, y_test, scaler_y):
+def evaluate(model, X_test, y_test, scaler_y, drifted_test):
     model.eval()
     preds_list = []
 
@@ -89,12 +96,16 @@ def evaluate(model, X_test, y_test, scaler_y):
             preds = model(batch)
             preds_list.append(preds.cpu().numpy())
 
-    preds = np.vstack(preds_list)
-    y_true = y_test.cpu().numpy()
+    preds_residual = np.vstack(preds_list)
+    y_residual = y_test.cpu().numpy()
 
-    # Inverse scaling
-    preds = scaler_y.inverse_transform(preds)
-    y_true = scaler_y.inverse_transform(y_true)
+    # inverse scaling
+    preds_residual = scaler_y.inverse_transform(preds_residual)
+    y_residual = scaler_y.inverse_transform(y_residual)
+
+    # 🔥 reconstruct final signal
+    preds = drifted_test + preds_residual
+    y_true = drifted_test + y_residual
 
     rmse = rsme_metrics(y_true, preds)
     mae = mae_metrics(y_true, preds)
@@ -109,7 +120,7 @@ def evaluate(model, X_test, y_test, scaler_y):
 def run():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # ===== LOAD DATA =====
+    # ===== LOAD =====
     dataset = load_data(DATASET_PATH)
     dataset = clean_data(dataset)
     dataset = remove_outliers(dataset)
@@ -117,29 +128,36 @@ def run():
     print("\nAFTER CLEANING:")
     print(dataset['PM2.5'].describe())
 
-    # ===== ADD DRIFT =====
+    # ===== DRIFT =====
     dataset['PM2.5_drifted'] = add_mixed_drift_noise(dataset['PM2.5'].values)
 
     # ===== FEATURES =====
-    X = dataset[['PM2.5_drifted', 'PM10', 'NO2', 'O3', 'CO']].values
-    y = dataset['PM2.5'].values.reshape(-1, 1)
+    features = ['PM2.5_drifted', 'PM10', 'NO2', 'O3', 'CO']
+    X = dataset[features].values
 
-    # ===== NORMALIZATION =====
-    scaler_X = MinMaxScaler()
-    scaler_y = MinMaxScaler()
+    y_true = dataset['PM2.5'].values.reshape(-1, 1)
+    drifted = dataset['PM2.5_drifted'].values.reshape(-1, 1)
+
+    # 🔥 RESIDUAL TARGET
+    y_residual = y_true - drifted
+
+    # ===== SCALING =====
+    scaler_X = StandardScaler()
+    scaler_y = StandardScaler()
 
     X_scaled = scaler_X.fit_transform(X)
-    y_scaled = scaler_y.fit_transform(y)
+    y_scaled = scaler_y.fit_transform(y_residual)
 
     # ===== SEQUENCES =====
-    seq_length = 20
+    seq_length = 5
     X_seq, y_seq = create_sequences(X_scaled, y_scaled, seq_length)
 
-    # ===== SPLIT =====
     split = int(len(X_seq) * 0.8)
 
     X_train, X_test = X_seq[:split], X_seq[split:]
     y_train, y_test = y_seq[:split], y_seq[split:]
+
+    drifted_test = drifted[split + seq_length:]
 
     # ===== TORCH =====
     X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
@@ -148,22 +166,22 @@ def run():
     X_test = torch.tensor(X_test, dtype=torch.float32).to(device)
     y_test_tensor = torch.tensor(y_test, dtype=torch.float32).to(device)
 
-    # ===== DATALOADERS =====
+    # ===== DATALOADER =====
     train_dataset = TensorDataset(X_train, y_train)
     val_dataset = TensorDataset(X_test, y_test_tensor)
 
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=False)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
 
     # ===== MODEL =====
     model = LSTMModel(
-        input_size=X_train.shape[2],   # correct feature size
-        hidden_size=64,
-        num_layers=2
+        input_size=X_train.shape[2],
+        hidden_size=128,   # 🔥 stronger
+        num_layers=1       # 🔥 simpler = better
     ).to(device)
 
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
 
     # ===== TRAIN =====
     train_losses, val_losses = train_model(
@@ -180,22 +198,19 @@ def run():
         model,
         X_test,
         y_test_tensor,
-        scaler_y
+        scaler_y,
+        drifted_test
     )
 
-    print("\n===== LSTM RESULTS =====")
+    print("\n===== IMPROVED LSTM RESULTS =====")
     print(f"RMSE: {rmse:.4f}")
     print(f"MAE:  {mae:.4f}")
     print(f"R2:   {r2:.4f}")
 
     # ===== VISUALIZATION =====
-    drifted_last = scaler_X.inverse_transform(
-        X_test[:, -1, :].cpu().numpy()
-    )[:, 0]
-
     calibration_plot(
         y_true=y_true,
-        y_drifted=drifted_last,
+        y_drifted=drifted_test,
         y_pred=preds,
         title="Sensor Calibration (LSTM)",
         save_path="results/lstm_calibration.png"

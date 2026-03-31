@@ -34,7 +34,7 @@ def run():
     # -----------------------------
     # ADD DRIFT + NOISE
     # -----------------------------
-    dataset['PM2.5_drifted'] = add_mixed_drift_noise(dataset['PM2.5'].values)
+    dataset['PM2.5_drifted'] = add_linear_drift_noise(dataset['PM2.5'].values)
 
     # -----------------------------
     # FEATURES

@@ -1,0 +1,48 @@
+mixed_drift_noise result:
+
+===== IMPROVED LSTM RESULTS =====
+RMSE: 2.0442
+MAE:  1.6665
+R2:   0.9769
+
+===== Polynomial Calibration Results =====
+RMSE: 3.8750
+MAE:  3.2606
+R2 Score: 0.9171
+
+===== XGBoost Calibration Results =====
+RMSE: 3.6190
+MAE:  3.0235
+R2 Score: 0.9277
+
+sinusoidal_drift_noise results:
+===== IMPROVED LSTM RESULTS =====
+RMSE: 2.5163
+MAE:  1.9758
+R2:   0.9650
+
+===== Polynomial Calibration Results =====
+RMSE: 3.3890
+MAE:  2.9830
+R2 Score: 0.9366
+
+===== XGBoost Calibration Results =====
+RMSE: 3.0387
+MAE:  2.5761
+R2 Score: 0.9490
+
+linear_drift_noise results:
+===== IMPROVED LSTM RESULTS =====
+RMSE: 1.5860
+MAE:  1.3557
+R2:   0.9861
+
+===== Polynomial Calibration Results =====
+RMSE: 6.3696
+MAE:  6.3034
+R2 Score: 0.7760
+
+===== XGBoost Calibration Results =====
+RMSE: 6.0550
+MAE:  5.9486
+R2 Score: 0.7976

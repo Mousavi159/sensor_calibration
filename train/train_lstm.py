@@ -7,7 +7,11 @@ from sklearn.preprocessing import StandardScaler
 
 from utils.dataset import load_data
 from utils.data_preprocess import clean_data, remove_outliers
-from utils.bias import add_mixed_drift_noise
+from utils.bias import (
+    add_mixed_drift_noise,
+    add_sinusoidal_drift_noise,
+    add_linear_drift_noise
+)
 from utils.metrics import rsme_metrics, mae_metrics, r2_score_metrics
 from utils.visualization import (
     calibration_plot,
@@ -129,7 +133,7 @@ def run():
     print(dataset['PM2.5'].describe())
 
     # ===== DRIFT =====
-    dataset['PM2.5_drifted'] = add_mixed_drift_noise(dataset['PM2.5'].values)
+    dataset['PM2.5_drifted'] = add_linear_drift_noise(dataset['PM2.5'].values)
 
     # ===== FEATURES =====
     features = ['PM2.5_drifted', 'PM10', 'NO2', 'O3', 'CO']
@@ -213,30 +217,37 @@ def run():
         y_drifted=drifted_test,
         y_pred=preds,
         title="Sensor Calibration (LSTM)",
-        save_path="results/lstm_calibration.png"
+        save_path="results/lstm_calibration2.png"
     )
 
     scatter_plot(
         y_true,
         preds,
         title="True vs Predicted (LSTM)",
-        save_path="results/lstm_scatter.png"
+        save_path="results/lstm_scatter2.png"
     )
 
     distribution_errors(
         y_true,
         preds,
         title="LSTM Error Distribution",
-        save_path="results/lstm_errors.png"
+        save_path="results/lstm_errors2.png"
     )
 
     plot_learning_curves(
         train_losses,
         val_losses,
         title="LSTM Learning Curves",
-        save_path="results/lstm_learning_curve.png"
+        save_path="results/lstm_learning_curve2.png"
     )
 
 
 if __name__ == "__main__":
     run()
+
+"""
+===== IMPROVED LSTM RESULTS =====
+RMSE: 2.0442
+MAE:  1.6665
+R2:   0.9769
+"""

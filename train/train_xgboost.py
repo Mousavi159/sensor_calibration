@@ -1,6 +1,10 @@
 from utils.dataset import load_data
 from utils.data_preprocess import clean_data, remove_outliers
-from utils.bias import add_noise
+from utils.bias import(
+    add_sinusoidal_drift_noise,
+    add_mixed_drift_noise,
+    add_linear_drift_noise
+)
 from utils.metrics import rsme_metrics, mae_metrics, r2_score_metrics
 from models.xgboost_model import XGBoostModel
 from utils.visualization import calibration_plot, distribution_errors, scatter_plot
@@ -47,7 +51,7 @@ def run():
     # -----------------------------
     # ADD DRIFT + NOISE
     # -----------------------------
-    dataset['PM2.5_drifted'] = add_noise(dataset['PM2.5'].values)
+    dataset['PM2.5_drifted'] = add_mixed_drift_noise(dataset['PM2.5'].values)
 
     signal = dataset['PM2.5_drifted'].values
 
@@ -110,21 +114,21 @@ def run():
         y_drifted=drifted_test,
         y_pred=y_pred,
         title="Sensor Calibration (XGBoost)",
-        save_path="results/xgboost_calibration.png"
+        save_path="results/xgboost_calibration2.png"
     )
 
     scatter_plot(
         y_test,
         y_pred,
         title="True vs Predicted (XGBoost)",
-        save_path="results/xgboost_scatter.png"
+        save_path="results/xgboost_scatter2.png"
     )
 
     distribution_errors(
         y_test,
         y_pred,
         title="XGBoost Error Distribution",
-        save_path="results/xgboost_errors.png"
+        save_path="results/xgboost_errors2.png"
     )
 
 
@@ -136,4 +140,11 @@ if __name__ == "__main__":
 RMSE: 3.0387
 MAE:  2.5761
 R2 Score: 0.9490
+
+2
+
+===== XGBoost Calibration Results =====
+RMSE: 3.6190
+MAE:  3.0235
+R2 Score: 0.9277
 """

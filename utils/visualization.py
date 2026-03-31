@@ -45,3 +45,27 @@ def scatter_plot(y_test, y_pred, title=None, save_path=None):
     if save_path:
         plt.savefig(save_path, dpi=300)
     plt.show()
+
+def plot_learning_curves(train_losses, val_losses=None, title=None, save_path=None):
+
+    plt.figure(figsize=(8, 5))
+
+    # Plot training loss
+    plt.plot(train_losses, label="Train Loss")
+
+    # Plot validation loss (if available)
+    if val_losses is not None:
+        plt.plot(val_losses, label="Validation Loss")
+    if title:
+        plt.title(title)
+
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.grid(True)
+
+    # Save if path provided
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+
+    plt.show()

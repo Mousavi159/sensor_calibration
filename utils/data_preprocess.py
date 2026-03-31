@@ -17,7 +17,15 @@ def clean_data(dataset):
 
 
 def remove_outliers(dataset):
-    return dataset[
-        (dataset['PM2.5'] < dataset['PM2.5'].quantile(0.99)) &
-        (dataset['PM10'] < dataset['PM10'].quantile(0.99))
+    # 1. Physical constraints (MOST IMPORTANT)
+    dataset = dataset[
+        (dataset['PM2.5'] >= 0) & (dataset['PM2.5'] <= 200) &
+        (dataset['PM10'] >= 0) & (dataset['PM10'] <= 300)
     ]
+
+    # 2. Optional statistical cleanup
+    dataset = dataset[
+        dataset['PM2.5'] < dataset['PM2.5'].quantile(0.995)
+    ]
+
+    return dataset

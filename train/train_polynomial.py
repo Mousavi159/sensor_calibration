@@ -1,56 +1,80 @@
 from utils.dataset import load_data
 from utils.data_preprocess import clean_data, remove_outliers
 from utils.bias import add_noise
-from utils.metrics import rsme_metrics
-from utils.metrics import mae_metrics
-from utils.metrics import r2_score_metrics
+from utils.metrics import rsme_metrics, mae_metrics, r2_score_metrics
 from models.polynomial_model import PolynomialModel
-from utils.visualization import calibration_plot
-from utils.visualization import distribution_errors
-from utils.visualization import scatter_plot
+from utils.visualization import calibration_plot, distribution_errors, scatter_plot
 
 from sklearn.preprocessing import StandardScaler
-
 import numpy as np
 
 DATASET_PATH = "data/"
 
 
 def run():
-    dataset = load_data(DATASET_PATH)
+    # -----------------------------
+    # 🔒 FIX RANDOMNESS
+    # -----------------------------
+    np.random.seed(42)
 
+    # -----------------------------
+    # LOAD + CLEAN
+    # -----------------------------
+    dataset = load_data(DATASET_PATH)
     dataset = clean_data(dataset)
     dataset = remove_outliers(dataset)
 
+    print("\nAFTER CLEANING:")
+    print(dataset['PM2.5'].describe())
+
+    # -----------------------------
+    # ADD DRIFT + NOISE
+    # -----------------------------
     dataset['PM2.5_drifted'] = add_noise(dataset['PM2.5'].values)
 
+    # -----------------------------
+    # FEATURES
+    # -----------------------------
     X = dataset[['PM2.5_drifted']].values
     y = dataset['PM2.5'].values
 
+    # -----------------------------
+    # SPLIT
+    # -----------------------------
     split = int(len(X) * 0.8)
-
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
 
+    # -----------------------------
+    # SCALING
+    # -----------------------------
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
+    # -----------------------------
+    # MODEL
+    # -----------------------------
     model = PolynomialModel()
     model.train(X_train, y_train)
 
     y_pred = model.predict(X_test)
 
+    # -----------------------------
+    # METRICS
+    # -----------------------------
     rmse = rsme_metrics(y_test, y_pred)
     mae = mae_metrics(y_test, y_pred)
     r2 = r2_score_metrics(y_test, y_pred)
-
 
     print("\n===== Polynomial Calibration Results =====")
     print(f"RMSE: {rmse:.4f}")
     print(f"MAE:  {mae:.4f}")
     print(f"R2 Score: {r2:.4f}")
 
+    # -----------------------------
+    # VISUALIZATION
+    # -----------------------------
     calibration_plot(
         y_true=y_test,
         y_drifted=X_test.flatten(),
@@ -76,11 +100,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-
-
-"""
-===== Polynomial Calibration Results =====
-RMSE: 34.0403
-MAE:  31.2970
-R2 Score: -5.7452
-"""

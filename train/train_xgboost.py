@@ -5,8 +5,8 @@ from utils.metrics import rsme_metrics, mae_metrics, r2_score_metrics
 from models.xgboost_model import XGBoostModel
 from utils.visualization import calibration_plot, distribution_errors, scatter_plot
 
+from sklearn.preprocessing import StandardScaler
 import numpy as np
-
 
 DATASET_PATH = "data/"
 
@@ -18,12 +18,8 @@ def create_features(signal, window=20):
     X = []
 
     for i in range(window, len(signal)):
-        row = []
+        row = [signal[i]]
 
-        # current value
-        row.append(signal[i])
-
-        # past values (temporal memory)
         for j in range(1, window + 1):
             row.append(signal[i - j])
 
@@ -32,53 +28,61 @@ def create_features(signal, window=20):
     return np.array(X)
 
 
-# =====================================
-# MAIN TRAINING FUNCTION
-# =====================================
 def run():
     # -----------------------------
-    # LOAD DATA
+    # 🔒 FIX RANDOMNESS
     # -----------------------------
-    dataset = load_data(DATASET_PATH)
+    np.random.seed(42)
 
     # -----------------------------
-    # PREPROCESSING
+    # LOAD + CLEAN
     # -----------------------------
+    dataset = load_data(DATASET_PATH)
     dataset = clean_data(dataset)
     dataset = remove_outliers(dataset)
+
+    print("\nAFTER CLEANING:")
+    print(dataset['PM2.5'].describe())
 
     # -----------------------------
     # ADD DRIFT + NOISE
     # -----------------------------
     dataset['PM2.5_drifted'] = add_noise(dataset['PM2.5'].values)
 
-    # -----------------------------
-    # FEATURES + TARGET
-    # -----------------------------
-    window = 20
     signal = dataset['PM2.5_drifted'].values
 
-    X = create_features(signal, window=window)
-    y = dataset['PM2.5'].values[window:]  # align with lag
+    print("Drifted signal min/max:", signal.min(), signal.max())
 
     # -----------------------------
-    # TRAIN / TEST SPLIT
+    # FEATURES
+    # -----------------------------
+    window = 20
+    X = create_features(signal, window=window)
+    y = dataset['PM2.5'].values[window:]
+
+    # -----------------------------
+    # SPLIT
     # -----------------------------
     split_idx = int(len(X) * 0.8)
-
     X_train, X_test = X[:split_idx], X[split_idx:]
     y_train, y_test = y[:split_idx], y[split_idx:]
 
     # -----------------------------
-    # MODEL TRAINING
+    # SCALING
+    # -----------------------------
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    # -----------------------------
+    # MODEL
     # -----------------------------
     model = XGBoostModel()
     model.train(X_train, y_train)
 
-    # -----------------------------
-    # PREDICTION
-    # -----------------------------
     y_pred = model.predict(X_test)
+
+    print("Predictions min/max:", y_pred.min(), y_pred.max())
 
     # -----------------------------
     # METRICS
@@ -93,11 +97,14 @@ def run():
     print(f"R2 Score: {r2:.4f}")
 
     # -----------------------------
-    # FIXED VISUALIZATION ALIGNMENT
+    # ALIGNMENT
     # -----------------------------
-    drifted = signal[window:]                  # align with y
-    drifted_test = drifted[split_idx:]         # align with test set
+    drifted = signal[window:]
+    drifted_test = drifted[split_idx:]
 
+    # -----------------------------
+    # VISUALIZATION
+    # -----------------------------
     calibration_plot(
         y_true=y_test,
         y_drifted=drifted_test,
@@ -121,8 +128,12 @@ def run():
     )
 
 
-# =====================================
-# ENTRY POINT
-# =====================================
 if __name__ == "__main__":
     run()
+
+"""
+===== XGBoost Calibration Results =====
+RMSE: 3.0387
+MAE:  2.5761
+R2 Score: 0.9490
+"""
